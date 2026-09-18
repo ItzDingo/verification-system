@@ -30,7 +30,7 @@ const links = [
   { href: '/dashboard/stats', label: 'Analytics', icon: BarChart3 },
   { href: '/dashboard/logs', label: 'Logs', icon: FileText },
   { href: '/dashboard/blacklist', label: 'Blacklist', icon: Ban },
-  { href: '/dashboard/reports', label: 'Report', icon: Flag },
+  { href: '/dashboard/reports', label: 'Reports', icon: Flag },
 ];
 
 function roleColorStyle(color: number) {

@@ -332,41 +332,31 @@ client.on('clientReady', async () => {
     .subscribe();
 
   // ── Supabase realtime: staff reports from website ───────────────────────
+  // The website's /api/reports route now DMs the owner directly via the
+  // Discord REST API at submit-time (see website/app/api/reports/route.ts),
+  // which is what actually reaches the owner — Realtime is not required for
+  // that anymore. This listener is kept only as a lightweight log so it's
+  // visible in the bot's console when a report comes in; it intentionally
+  // does NOT also send a DM, since that would double-notify the owner for
+  // every report whenever Realtime happens to be working.
   supabase
     .channel('report-updates')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reports' }, async (payload) => {
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reports' }, (payload) => {
       const report = payload.new;
       if (!report) return;
-
-      const owner = await client.users.fetch(OWNER_ID).catch(() => null);
-      if (!owner) {
-        console.warn('[Reports] Could not fetch owner for report notification.');
-        return;
-      }
-
-      const categoryLabels = {
-        bot: '🤖 Bot Issue',
-        website: '🌐 Website Bug',
-        verification: '✅ Verification Problem',
-        security: '🔒 Security Concern',
-        general: '📋 General',
-      };
-
-      const embed = new EmbedBuilder()
-        .setTitle('🚨 New Staff Report')
-        .addFields(
-          { name: 'Category', value: categoryLabels[report.category] || report.category, inline: true },
-          { name: 'Reporter', value: `${report.reporter_name || 'Staff'} (\`${report.reporter_id}\`)`, inline: true },
-          { name: 'Message', value: report.message || 'No message', inline: false },
-        )
-        .setColor('#ff6600')
-        .setTimestamp(new Date(report.created_at))
-        .setFooter({ text: 'Verification System · Staff Report' });
-
-      const sent = await dmUser(owner, embed);
-      console.log(`[Reports] Owner notified: ${sent ? 'yes' : 'no'} — from ${report.reporter_name}`);
+      console.log(`[Reports] New report logged in DB from ${report.reporter_name || report.reporter_id} (${report.category}).`);
     })
-    .subscribe();
+    .subscribe((status, err) => {
+      // Realtime subscriptions fail silently by default — if the "reports" table
+      // isn't added to Supabase's realtime publication (Database > Replication),
+      // this channel never fires. That's fine now (the DM no longer depends on
+      // it), but logging the status still helps confirm the DB write path.
+      if (status === 'SUBSCRIBED') {
+        console.log('[Reports] Realtime channel subscribed.');
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        console.warn(`[Reports] Realtime channel not connected (${status}) — this no longer affects report DMs.`, err || '');
+      }
+    });
 });
 
 // ─── !send command ────────────────────────────────────────────────────────────
