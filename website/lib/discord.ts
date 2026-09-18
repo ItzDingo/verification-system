@@ -75,19 +75,79 @@ function defaultEmbedAvatarIndex(userId: string): number {
   }
 }
 
+export interface DiscordUser {
+  id: string;
+  username: string;
+  global_name?: string | null;
+  avatar: string | null;
+}
+
+/**
+ * Fetches a user by ID from Discord's global user endpoint, which works even
+ * if the user has left the guild (unlike the guild-member endpoint, which
+ * 404s the moment someone leaves). Requires the bot to share at least one
+ * mutual context with the user, which is true for anyone who was ever a
+ * member of this guild.
+ */
+export async function fetchGlobalUser(userId: string): Promise<DiscordUser | null> {
+  try {
+    const res = await fetch(`${DISCORD_API}/users/${userId}`, {
+      headers: { Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}` },
+      next: { revalidate: 300 },
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 export function avatarUrl(userId: string, avatarHash: string | null | undefined, size = 128): string {
   if (!avatarHash) return `https://cdn.discordapp.com/embed/avatars/${defaultEmbedAvatarIndex(userId)}.png`;
   const ext = avatarHash.startsWith('a_') ? 'gif' : 'png';
   return `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.${ext}?size=${size}`;
 }
 
-export async function fetchMemberDisplay(userId: string) {
+/**
+ * Resolves a display name/avatar for a user, in order of freshness:
+ * 1. Live guild member (has nickname + up-to-date avatar) — works while they're in the server.
+ * 2. Global Discord user lookup — still works after they've left the server.
+ * 3. A caller-supplied last-known fallback (e.g. cached in our own DB from a previous session).
+ * 4. Finally "User {id}" — only when Discord has no record of them at all (rare: deleted account).
+ */
+export async function fetchMemberDisplay(
+  userId: string,
+  lastKnown?: { username?: string | null; avatar?: string | null } | null
+) {
   const member = await fetchGuildMember(userId);
-  if (!member) return { username: `User ${userId}`, avatar: avatarUrl(userId, null), displayName: `User ${userId}` };
-  const u = member.user;
-  return {
-    username: u.username,
-    displayName: member.nick || u.global_name || u.username,
-    avatar: avatarUrl(u.id, u.avatar),
-  };
+  if (member) {
+    const u = member.user;
+    return {
+      username: u.username,
+      displayName: member.nick || u.global_name || u.username,
+      avatar: avatarUrl(u.id, u.avatar),
+      inServer: true,
+    };
+  }
+
+  const globalUser = await fetchGlobalUser(userId);
+  if (globalUser) {
+    return {
+      username: globalUser.username,
+      displayName: globalUser.global_name || globalUser.username,
+      avatar: avatarUrl(globalUser.id, globalUser.avatar),
+      inServer: false,
+    };
+  }
+
+  if (lastKnown?.username) {
+    return {
+      username: lastKnown.username,
+      displayName: lastKnown.username,
+      avatar: lastKnown.avatar || avatarUrl(userId, null),
+      inServer: false,
+    };
+  }
+
+  return { username: `User ${userId}`, displayName: `User ${userId}`, avatar: avatarUrl(userId, null), inServer: false };
 }

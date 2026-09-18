@@ -11,6 +11,7 @@ export interface PodiumEntry {
   accepted: number;
   denied: number;
   total: number;
+  inServer?: boolean;
 }
 
 function PodiumColumn({
@@ -75,6 +76,11 @@ function PodiumColumn({
               {entry.displayName}
             </p>
             <p className="w-full truncate text-center text-[11px] text-zinc-500">@{entry.username}</p>
+            {entry.inServer === false && (
+              <p className="w-full truncate text-center text-[9px] font-medium uppercase tracking-wide text-zinc-400">
+                Left server
+              </p>
+            )}
           </div>
 
           <div className="absolute inset-x-0 bottom-3 flex flex-col items-center text-white drop-shadow-md">

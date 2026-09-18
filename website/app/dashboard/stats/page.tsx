@@ -30,12 +30,14 @@ function Bar({
   label,
   highlight,
   color,
+  showLabel = true,
 }: {
   value: number;
   max: number;
   label: string;
   highlight?: boolean;
   color?: string;
+  showLabel?: boolean;
 }) {
   const h = max > 0 ? Math.max(4, Math.round((value / max) * 120)) : 4;
   return (
@@ -49,8 +51,12 @@ function Bar({
           highlight ? color || 'bg-gradient-to-t from-indigo-600 to-sky-400' : 'bg-zinc-200 dark:bg-zinc-700'
         }`}
       />
-      <span className={`truncate text-[10px] ${highlight ? 'font-bold text-zinc-900 dark:text-white' : 'text-zinc-400'}`}>
-        {label}
+      <span
+        className={`h-3.5 truncate text-[10px] ${
+          highlight ? 'font-bold text-zinc-900 dark:text-white' : 'text-zinc-400'
+        }`}
+      >
+        {showLabel ? label : ''}
       </span>
       <div className="pointer-events-none absolute -top-6 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] text-white opacity-0 transition group-hover:opacity-100 dark:bg-zinc-100 dark:text-zinc-900">
         {label}: {value}
@@ -138,6 +144,7 @@ export default function ServerStatsPage() {
               max={maxActivityHour}
               label={d.label}
               highlight={d.hour === stats?.peakActivityHour?.hour}
+              showLabel={d.hour % 3 === 0 || d.hour === stats?.peakActivityHour?.hour}
               color="bg-gradient-to-t from-amber-500 to-orange-400"
             />
           ))}
@@ -211,6 +218,7 @@ export default function ServerStatsPage() {
                 max={Math.max(...verificationsByHour.map((x) => x.count), 1)}
                 label={d.label}
                 highlight={d.hour === stats?.peakVerificationHour?.hour}
+                showLabel={d.hour % 3 === 0 || d.hour === stats?.peakVerificationHour?.hour}
                 color="bg-gradient-to-t from-emerald-600 to-emerald-400"
               />
             ))}
@@ -233,6 +241,7 @@ export default function ServerStatsPage() {
                 max={Math.max(...requestsByHour.map((x) => x.count), 1)}
                 label={d.label}
                 highlight={d.hour === stats?.peakRequestHour?.hour}
+                showLabel={d.hour % 3 === 0 || d.hour === stats?.peakRequestHour?.hour}
                 color="bg-gradient-to-t from-sky-600 to-sky-400"
               />
             ))}

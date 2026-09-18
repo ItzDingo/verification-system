@@ -44,7 +44,14 @@ export default function LeaderboardPage() {
                       <img src={entry.avatar} alt="" className="h-10 w-10 rounded-full border border-zinc-200 object-cover dark:border-zinc-700" />
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-zinc-900 dark:text-white">{entry.displayName}</p>
-                        <p className="truncate text-xs text-zinc-500">@{entry.username}</p>
+                        <p className="truncate text-xs text-zinc-500">
+                          @{entry.username}
+                          {entry.inServer === false && (
+                            <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+                              · Left server
+                            </span>
+                          )}
+                        </p>
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-4 text-sm sm:justify-end">

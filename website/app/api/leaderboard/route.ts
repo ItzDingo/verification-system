@@ -22,13 +22,17 @@ export async function GET(req: NextRequest) {
 
   const enriched = await Promise.all(
     (stats || []).map(async (s) => {
-      const display = await fetchMemberDisplay(s.staff_id);
+      const display = await fetchMemberDisplay(s.staff_id, {
+        username: s.last_known_username,
+        avatar: s.last_known_avatar,
+      });
       const total = (s.accepted || 0) + (s.denied || 0);
       return {
         staffId: s.staff_id,
         displayName: display.displayName,
         username: display.username,
         avatar: display.avatar,
+        inServer: display.inServer,
         accepted: s.accepted || 0,
         denied: s.denied || 0,
         total,

@@ -132,16 +132,46 @@ export async function POST(req: NextRequest) {
     });
 
     const field = normalizedAction === 'accepted' ? 'accepted' : 'denied';
-    const stRes = await supabaseServer.from('staff_stats').select('*').eq('staff_id', token.discordId).maybeSingle();
 
-    const st = stRes.data;
-    if (st) {
-      await supabaseServer
-        .from('staff_stats')
-        .update({ [field]: (st as Record<string, number>)[field] + 1 })
-        .eq('staff_id', token.discordId);
-    } else {
-      await supabaseServer.from('staff_stats').insert({ staff_id: token.discordId, [field]: 1 });
+    // Cache the acting staff member's own name/avatar from their live session.
+    // This is the one moment we're guaranteed accurate data for them — if they
+    // later leave the server, Discord's guild-member API will 404 for their ID
+    // forever, so without this cache the leaderboard would have nothing to
+    // fall back to and would show a raw "User 123456789" instead of a name.
+    // This is best-effort and wrapped separately so a missing column (e.g. if
+    // the last_known_username/last_known_avatar migration hasn't been run yet)
+    // can never block the actual accept/deny action below.
+    try {
+      const stRes = await supabaseServer.from('staff_stats').select('*').eq('staff_id', token.discordId).maybeSingle();
+      const lastKnownUsername = (token.username as string) || null;
+      const lastKnownAvatar = (token.avatar as string) || null;
+
+      const st = stRes.data;
+      const writeRes = st
+        ? await supabaseServer
+            .from('staff_stats')
+            .update({
+              [field]: (st as Record<string, number>)[field] + 1,
+              last_known_username: lastKnownUsername,
+              last_known_avatar: lastKnownAvatar,
+            })
+            .eq('staff_id', token.discordId)
+        : await supabaseServer.from('staff_stats').insert({
+            staff_id: token.discordId,
+            [field]: 1,
+            last_known_username: lastKnownUsername,
+            last_known_avatar: lastKnownAvatar,
+          });
+
+      if (writeRes.error) {
+        console.error(
+          '[Verify] staff_stats write failed — leaderboard counts/name cache may be stale. ' +
+            'If this mentions last_known_username/last_known_avatar, add those columns to staff_stats.',
+          writeRes.error
+        );
+      }
+    } catch (err) {
+      console.error('[Verify] staff_stats write threw unexpectedly:', err);
     }
 
     if (normalizedAction === 'accepted') {
