@@ -9,8 +9,31 @@ import { THEME_STORAGE_KEY } from '@/lib/theme';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: 'Staff Portal',
-  description: 'Internal Staff Management System',
+  metadataBase: new URL(process.env.NEXTAUTH_URL || 'https://verification-system-plum.vercel.app'),
+  title: 'Paradise',
+  description: 'Paradise Private Api',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/icon-16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/icon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: '/apple-touch-icon.png',
+  },
+  openGraph: {
+    title: 'Paradise Private Api',
+    description: 'Paradise Private Api',
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Paradise' }],
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Paradise Private Api',
+    description: 'Paradise Private Api',
+    images: ['/og-image.png'],
+  },
 };
 
 const themeBoot = `

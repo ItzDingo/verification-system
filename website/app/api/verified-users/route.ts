@@ -50,6 +50,8 @@ export async function GET(req: NextRequest) {
         verifiedBy: u.verified_by,
         verifiedAt: u.verified_at,
         reason: u.verify_reason,
+        verifiedUntil: u.verified_until || null,
+        durationLabel: u.verify_duration_label || 'Permanent',
       };
     })
   );

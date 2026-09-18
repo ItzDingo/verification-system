@@ -136,7 +136,7 @@ export default function ServerStatsPage() {
           <Flame size={15} className="text-amber-500" /> Combined activity by hour
         </h2>
         <p className="mb-4 text-xs text-zinc-500">Verifications + requests together • highlighted bar is the peak hour.</p>
-        <div className="relative flex items-end gap-0.5 overflow-x-auto pb-1 sm:gap-1">
+        <div className="relative flex items-end gap-0.5 sm:gap-1.5">
           {activityByHour.map((d) => (
             <Bar
               key={d.hour}
@@ -162,16 +162,17 @@ export default function ServerStatsPage() {
             <CalendarDays size={15} className="text-sky-500" /> Verifications by weekday
           </h2>
           <p className="mb-4 text-xs text-zinc-500">Accepted verifications per day, last {stats?.periodDays ?? 30} days.</p>
-          <div className="flex items-end gap-2">
+          <div className="flex items-end justify-center gap-1.5 sm:gap-3">
             {verificationsByDay.map((d) => (
-              <Bar
-                key={d.day}
-                value={d.count}
-                max={maxVerDay}
-                label={d.label}
-                highlight={d.day === stats?.peakVerificationDay?.day}
-                color="bg-gradient-to-t from-sky-600 to-sky-400"
-              />
+              <div key={d.day} className="w-10 sm:w-12">
+                <Bar
+                  value={d.count}
+                  max={maxVerDay}
+                  label={d.label}
+                  highlight={d.day === stats?.peakVerificationDay?.day}
+                  color="bg-gradient-to-t from-sky-600 to-sky-400"
+                />
+              </div>
             ))}
           </div>
         </motion.div>
@@ -186,16 +187,17 @@ export default function ServerStatsPage() {
             <TrendingUp size={15} className="text-emerald-500" /> Requests by weekday
           </h2>
           <p className="mb-4 text-xs text-zinc-500">New verification requests per day, last {stats?.periodDays ?? 30} days.</p>
-          <div className="flex items-end gap-2">
+          <div className="flex items-end justify-center gap-1.5 sm:gap-3">
             {requestsByDay.map((d) => (
-              <Bar
-                key={d.day}
-                value={d.count}
-                max={maxReqDay}
-                label={d.label}
-                highlight={d.day === stats?.peakRequestDay?.day}
-                color="bg-gradient-to-t from-emerald-600 to-emerald-400"
-              />
+              <div key={d.day} className="w-10 sm:w-12">
+                <Bar
+                  value={d.count}
+                  max={maxReqDay}
+                  label={d.label}
+                  highlight={d.day === stats?.peakRequestDay?.day}
+                  color="bg-gradient-to-t from-emerald-600 to-emerald-400"
+                />
+              </div>
             ))}
           </div>
         </motion.div>

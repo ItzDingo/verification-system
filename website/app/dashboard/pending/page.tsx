@@ -90,6 +90,7 @@ export default function PendingPage() {
           { label: 'Username', value: `@${target?.username || modalUser?.username || '—'}` },
           { label: 'Discord ID', value: targetId },
           { label: 'Reason', value: (data.reason as string) || reason || 'Verified by Staff' },
+          { label: 'Duration', value: (data.durationLabel as string) || 'Permanent' },
           { label: 'Verified By', value: (data.staff as { tag?: string })?.tag || 'Staff' },
           { label: 'Time', value: new Date((data.timestamp as string) || Date.now()).toLocaleString() },
         ],

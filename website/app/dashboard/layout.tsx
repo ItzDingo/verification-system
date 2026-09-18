@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  LogOut, Shield, Users, Clock, FileText, Ban, LayoutDashboard, Trophy, BarChart3, Flag, Menu, X,
+  LogOut, Users, Clock, FileText, Ban, LayoutDashboard, Trophy, BarChart3, Flag, Menu, X,
 } from 'lucide-react';
 import { Session } from 'next-auth';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -147,10 +147,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           transition={{ duration: 0.5 }}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-900/90 shadow-lg backdrop-blur dark:bg-white/90"
         >
-          <Shield size={18} className="text-white dark:text-zinc-900" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Paradise" className="h-6 w-6 object-contain" />
         </motion.div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">Staff Portal</p>
+          <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">Paradise</p>
           <p className="text-[11px] uppercase tracking-wider text-zinc-500">Verification</p>
         </div>
       </div>
@@ -247,7 +248,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             >
               <Menu size={20} />
             </button>
-            <p className="text-sm font-semibold">Staff Portal</p>
+            <p className="text-sm font-semibold">Paradise</p>
             <img src={avatar} alt="" className="h-9 w-9 rounded-full border border-white/40 dark:border-zinc-600" />
           </header>
 

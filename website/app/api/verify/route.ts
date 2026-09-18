@@ -6,6 +6,28 @@ import { fetchMemberDisplay } from '@/lib/discord';
 import { isDevBypassToken } from '@/lib/dev-bypass';
 import { devVerifyAction, getDevBlacklist } from '@/lib/dev-mocks';
 
+type DurationUnit = 'minutes' | 'hours' | 'days' | 'months' | 'permanent';
+
+const UNIT_MS: Record<Exclude<DurationUnit, 'permanent'>, number> = {
+  minutes: 60_000,
+  hours: 60 * 60_000,
+  days: 24 * 60 * 60_000,
+  months: 30 * 24 * 60 * 60_000, // approximate — a calendar month has no fixed length
+};
+
+function computeExpiry(durationUnit?: string, durationValue?: number): { verifiedUntil: string | null; label: string } {
+  if (!durationUnit || durationUnit === 'permanent' || !durationValue || durationValue <= 0) {
+    return { verifiedUntil: null, label: 'Permanent' };
+  }
+  const unit = durationUnit as Exclude<DurationUnit, 'permanent'>;
+  const ms = UNIT_MS[unit];
+  if (!ms) return { verifiedUntil: null, label: 'Permanent' };
+
+  const until = new Date(Date.now() + ms * durationValue);
+  const unitLabel = durationValue === 1 ? unit.slice(0, -1) : unit; // "1 day" vs "2 days"
+  return { verifiedUntil: until.toISOString(), label: `${durationValue} ${unitLabel}` };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
@@ -14,14 +36,26 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { targetId, action, reason } = body;
+    const { targetId, action, reason, durationUnit, durationValue } = body;
 
     if (!targetId || !action) {
       return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
     }
 
     const normalizedAction = action === 'accept' ? 'accepted' : action === 'deny' ? 'denied' : action;
-    const normalizedReason = (reason || '').trim() || `${normalizedAction === 'accepted' ? 'Verified' : 'Denied'} by Staff`;
+    const trimmedReason = (reason || '').trim();
+
+    // A reason is mandatory when denying — the staff member must say why so
+    // it's recorded in the log and doesn't just show a generic placeholder.
+    if (normalizedAction === 'denied' && trimmedReason.length < 3) {
+      return NextResponse.json({ error: 'A reason is required to deny a verification.' }, { status: 400 });
+    }
+
+    const normalizedReason = trimmedReason || `${normalizedAction === 'accepted' ? 'Verified' : 'Denied'} by Staff`;
+    const { verifiedUntil, label: durationLabel } = normalizedAction === 'accepted'
+      ? computeExpiry(durationUnit, durationValue)
+      : { verifiedUntil: null, label: 'Permanent' };
+
 
     if (isDevBypassToken(token)) {
       if (normalizedAction === 'accepted' && getDevBlacklist().some((b) => b.user_id === targetId)) {
@@ -41,6 +75,8 @@ export async function POST(req: NextRequest) {
         target: { id: targetId, username: display.username, displayName: display.displayName, avatar: display.avatar },
         action: normalizedAction,
         reason: normalizedReason,
+        durationLabel,
+        verifiedUntil,
         staff: { id: token.discordId, tag: token.username || 'Staff' },
         timestamp: new Date().toISOString(),
         botOnline: true,
@@ -105,6 +141,8 @@ export async function POST(req: NextRequest) {
             verified_by: token.discordId,
             verified_at: new Date().toISOString(),
             verify_reason: normalizedReason,
+            verified_until: verifiedUntil,
+            verify_duration_label: durationLabel,
             username: targetDisplay.username,
             display_name: targetDisplay.displayName,
             avatar: targetDisplay.avatar,
@@ -182,6 +220,8 @@ export async function POST(req: NextRequest) {
           verified_by: token.discordId,
           verified_at: new Date().toISOString(),
           verify_reason: normalizedReason,
+          verified_until: verifiedUntil,
+          verify_duration_label: durationLabel,
           username: targetDisplay.username,
           display_name: targetDisplay.displayName,
           avatar: targetDisplay.avatar,
@@ -207,6 +247,8 @@ export async function POST(req: NextRequest) {
       target: { id: targetId, ...targetDisplay },
       action: normalizedAction,
       reason: normalizedReason,
+      durationLabel,
+      verifiedUntil,
       staff: {
         id: token.discordId,
         tag: token.username || 'Staff',

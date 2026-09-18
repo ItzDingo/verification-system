@@ -176,6 +176,8 @@ export function getDevVerifiedUsers(page: number, search: string) {
     verifiedBy: DEV_BYPASS_USER.discordId,
     verifiedAt: ago(24),
     reason: 'Verified in dev mock',
+    verifiedUntil: null as string | null,
+    durationLabel: 'Permanent',
   }));
 
   if (search) {

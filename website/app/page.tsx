@@ -159,9 +159,10 @@ export default function Home() {
               animate={{ y: [0, -4, 0] }}
               transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
             >
-              <Shield className="mx-auto mb-5 h-16 w-16 text-zinc-900 dark:text-white" strokeWidth={1.25} />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="Paradise" className="mx-auto mb-5 h-16 w-16 object-contain drop-shadow-sm" />
             </motion.div>
-            <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">Staff Portal</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">Paradise</h1>
             <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Sign in with Discord to access the dashboard</p>
             {devBypass ? (
               <p className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">

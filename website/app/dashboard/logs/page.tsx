@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { FileText, AlertCircle, Filter, Users, ShieldCheck } from 'lucide-react';
 import Pagination from '@/components/Pagination';
+import ExpiryCountdown from '@/components/ExpiryCountdown';
 
 interface Log {
   id: string;
@@ -22,6 +23,8 @@ interface VerifiedUser {
   avatar: string;
   verifiedAt: string;
   reason?: string;
+  verifiedUntil: string | null;
+  durationLabel: string;
 }
 
 type Tab = 'activity' | 'verified';
@@ -223,7 +226,10 @@ export default function LogsPage() {
               >
                 <img src={u.avatar} alt="" className="h-11 w-11 rounded-full border border-zinc-200 object-cover dark:border-zinc-700" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-zinc-900 dark:text-white">{u.displayName}</p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="truncate font-semibold text-zinc-900 dark:text-white">{u.displayName}</p>
+                    <ExpiryCountdown verifiedUntil={u.verifiedUntil} />
+                  </div>
                   <p className="truncate text-xs text-zinc-500">@{u.username}</p>
                   <p className="text-[10px] text-zinc-400">{new Date(u.verifiedAt).toLocaleDateString()}</p>
                   {u.reason && <p className="mt-1 truncate text-xs text-zinc-500">{u.reason}</p>}

@@ -28,6 +28,7 @@ const client = new Client({
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildInvites,
   ]
 });
 
@@ -97,6 +98,12 @@ const pendingWebVerify = new Map();
 // Verification button cooldowns — key: userId, value: last-request timestamp
 const verificationCooldowns = new Map();
 
+// Invite-use snapshot — key: invite code, value: current use count. Refreshed
+// on ready + kept in sync on inviteCreate/inviteDelete; diffed on every join
+// to figure out which invite a new member used (Discord doesn't tell us
+// directly — the standard trick is comparing use counts before/after).
+const inviteUseCache = new Map();
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function dmUser(user, payload) {
@@ -109,6 +116,133 @@ async function dmUser(user, payload) {
     return true;
   } catch {
     return false;
+  }
+}
+
+// ── Invite tracking ─────────────────────────────────────────────────────────
+
+async function refreshInviteCache(guild) {
+  try {
+    const invites = await guild.invites.fetch();
+    inviteUseCache.clear();
+    invites.forEach((inv) => inviteUseCache.set(inv.code, inv.uses ?? 0));
+  } catch (err) {
+    console.error('[Invites] Failed to fetch invites:', err.message || err);
+  }
+}
+
+/**
+ * Diffs current invite use-counts against the last snapshot to figure out
+ * which invite a newly-joined member used. Discord doesn't attach this info
+ * to the join event directly, so comparing before/after use counts is the
+ * standard approach. Vanity URLs and invites created by other bots outside
+ * this cache can't be detected this way — those are logged as unknown.
+ */
+async function resolveJoinInvite(guild) {
+  try {
+    const invites = await guild.invites.fetch();
+    let used = null;
+    for (const inv of invites.values()) {
+      const before = inviteUseCache.get(inv.code) ?? 0;
+      if ((inv.uses ?? 0) > before) {
+        used = inv;
+        break;
+      }
+    }
+    // Resync cache regardless of whether we found a match, so counts stay accurate.
+    inviteUseCache.clear();
+    invites.forEach((inv) => inviteUseCache.set(inv.code, inv.uses ?? 0));
+
+    if (!used) return null;
+    return {
+      code: used.code,
+      uses: used.uses ?? 0,
+      inviterId: used.inviter?.id || null,
+      inviterUsername: used.inviter?.username || null,
+      inviterAvatar: used.inviter
+        ? avatarUrlFor(used.inviter.id, used.inviter.avatar)
+        : null,
+    };
+  } catch (err) {
+    console.error('[Invites] Failed to resolve join invite:', err.message || err);
+    return null;
+  }
+}
+
+function avatarUrlFor(userId, avatarHash) {
+  if (!avatarHash) return `https://cdn.discordapp.com/embed/avatars/0.png`;
+  const ext = avatarHash.startsWith('a_') ? 'gif' : 'png';
+  return `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.${ext}?size=128`;
+}
+
+// ── Timed-verification expiry sweep ─────────────────────────────────────────
+
+/**
+ * Finds verified users whose verified_until has passed, fully resets them
+ * (removes the Verified role, marks them unverified in the DB — same as a
+ * brand-new user, per how this feature is meant to behave), and DMs them
+ * that their verification expired and they'll need to request again.
+ */
+async function sweepExpiredVerifications(guild) {
+  const nowIso = new Date().toISOString();
+  const { data: expired, error } = await supabase
+    .from('users')
+    .select('discord_id, verify_duration_label')
+    .eq('verified', true)
+    .not('verified_until', 'is', null)
+    .lte('verified_until', nowIso);
+
+  if (error) {
+    console.error('[Expiry] Failed to query expired verifications:', error.message);
+    return;
+  }
+  if (!expired || expired.length === 0) return;
+
+  for (const row of expired) {
+    try {
+      // Fully reset: same shape as a fresh, never-verified user.
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({
+          verified: false,
+          verified_by: null,
+          verified_at: null,
+          verify_reason: null,
+          verified_until: null,
+          verify_duration_label: null,
+        })
+        .eq('discord_id', row.discord_id);
+
+      if (updateError) {
+        console.error(`[Expiry] Failed to reset user ${row.discord_id}:`, updateError.message);
+        continue;
+      }
+
+      const member = await guild.members.fetch(row.discord_id).catch(() => null);
+      if (member && member.roles.cache.has(VERIFIED_ROLE)) {
+        markBotAction(member.id, VERIFIED_ROLE);
+        await member.roles.remove(VERIFIED_ROLE, 'Timed verification expired').catch(() => {});
+      }
+
+      const user = member?.user || await client.users.fetch(row.discord_id).catch(() => null);
+      if (user) {
+        await dmUser(user, new EmbedBuilder()
+          .setAuthor({ name: guild.name, iconURL: guild.iconURL({ dynamic: true }) || undefined })
+          .setTitle('⏰ Verification Expired')
+          .setDescription(
+            `Your verification in **${guild.name}** was **${row.verify_duration_label || 'temporary'}** and has now expired.\n\n` +
+            `You'll need to request a new verification to regain access.`
+          )
+          .setColor('#f59e0b')
+          .setTimestamp()
+          .setFooter({ text: guild.name })
+        );
+      }
+
+      console.log(`[Expiry] Reset expired verification for ${row.discord_id}`);
+    } catch (err) {
+      console.error(`[Expiry] Error processing ${row.discord_id}:`, err.message || err);
+    }
   }
 }
 
@@ -247,6 +381,17 @@ client.on('clientReady', async () => {
   if (!guild.members.me.permissions.has(PermissionFlagsBits.ViewAuditLog)) {
     console.warn('⚠️  CRITICAL: Bot is missing "View Audit Log" permission!');
   }
+  if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageGuild)) {
+    console.warn('⚠️  Bot is missing "Manage Guild" permission — invite tracking (who invited who) will not work.');
+  } else {
+    await refreshInviteCache(guild);
+    console.log(`[Invites] Cached use-counts for ${inviteUseCache.size} invite(s).`);
+  }
+
+  // Sweep for expired timed verifications every minute.
+  setInterval(() => sweepExpiredVerifications(guild).catch((err) => console.error('[Expiry] Sweep failed:', err)), 60_000);
+  // Also run once shortly after startup, in case some expired while the bot was offline.
+  setTimeout(() => sweepExpiredVerifications(guild).catch((err) => console.error('[Expiry] Startup sweep failed:', err)), 10_000);
 
   // ── Supabase realtime: sync verification status ─────────────────────────
   supabase
@@ -289,6 +434,17 @@ client.on('clientReady', async () => {
               .setColor('#00ff00')
               .setTimestamp()
               .setFooter({ text: `Verified by: ${staffName}`, iconURL: staffAvatar || undefined });
+
+            if (newUser.verified_until) {
+              const expiryTs = Math.floor(new Date(newUser.verified_until).getTime() / 1000);
+              successEmbed.addFields({
+                name: '⏰ Verification Length',
+                value: `${newUser.verify_duration_label || 'Temporary'} — expires <t:${expiryTs}:F> (<t:${expiryTs}:R>)`,
+                inline: false,
+              });
+            } else {
+              successEmbed.addFields({ name: '♾️ Verification Length', value: 'Permanent', inline: false });
+            }
 
             const successRow = new ActionRowBuilder().addComponents(
               new ButtonBuilder()
@@ -637,6 +793,43 @@ client.on('interactionCreate', async (interaction) => {
 //     c. Store stripped roles under executor.id for owner revoke
 //     d. DM executor with warning
 //     e. DM owner with security alert + profile pic + Revoke button
+
+// ─── Invite tracking events ────────────────────────────────────────────────
+
+client.on('inviteCreate', (invite) => {
+  if (invite.guild?.id !== GUILD_ID) return;
+  inviteUseCache.set(invite.code, invite.uses ?? 0);
+});
+
+client.on('inviteDelete', (invite) => {
+  if (invite.guild?.id !== GUILD_ID) return;
+  inviteUseCache.delete(invite.code);
+});
+
+client.on('guildMemberAdd', async (member) => {
+  if (member.guild.id !== GUILD_ID || member.user.bot) return;
+
+  const joinInvite = await resolveJoinInvite(member.guild);
+
+  try {
+    await supabase.from('invite_joins').insert({
+      user_id: member.id,
+      invite_code: joinInvite?.code || null,
+      inviter_id: joinInvite?.inviterId || null,
+      inviter_username: joinInvite?.inviterUsername || null,
+      inviter_avatar: joinInvite?.inviterAvatar || null,
+      uses_at_join: joinInvite?.uses ?? null,
+    });
+    console.log(
+      joinInvite
+        ? `[Invites] ${member.user.username} joined via ${joinInvite.code} (invited by ${joinInvite.inviterUsername || joinInvite.inviterId})`
+        : `[Invites] ${member.user.username} joined — could not determine invite used (vanity URL or untracked source).`
+    );
+  } catch (err) {
+    console.error('[Invites] Failed to store invite_joins row:', err.message || err);
+  }
+});
+
 
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
   if (newMember.guild.id !== GUILD_ID || newMember.user.bot) return;

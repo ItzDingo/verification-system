@@ -54,7 +54,7 @@ async function sendOwnerDMEmbed(opts: {
         { name: '🏷️ Category', value: CATEGORY_LABELS[opts.category] ?? opts.category, inline: true },
         { name: '📝 Message', value: opts.message.slice(0, 1000) || '(empty)', inline: false },
       ],
-      footer: { text: `Report from Staff Portal • ${opts.reporterId}` },
+      footer: { text: `Report from Paradise • ${opts.reporterId}` },
     };
     if (opts.reporterAvatar) embed.thumbnail = { url: opts.reporterAvatar };
 
